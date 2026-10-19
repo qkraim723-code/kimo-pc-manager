@@ -16,15 +16,17 @@ if not exist assets\icon.ico (
     python assets\generate_icon.py
 )
 
-echo.
-echo Running PyInstaller Build...
-pyinstaller --noconfirm --onedir --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
+echo Running PyInstaller Build (Standalone One-File Executable)...
+pyinstaller --noconfirm --onefile --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
 
 if %errorlevel% equ 0 (
+    copy /Y "dist\KimoPCManager.exe" ".\KimoPCManager.exe" >nul
     echo.
     echo ========================================================
     echo  BUILD SUCCESSFUL!
-    echo  Executable created at: dist\KimoPCManager\KimoPCManager.exe
+    echo  Standalone EXE ready at:
+    echo    1. .\KimoPCManager.exe (Project Root)
+    echo    2. .\dist\KimoPCManager.exe
     echo ========================================================
 ) else (
     echo.
