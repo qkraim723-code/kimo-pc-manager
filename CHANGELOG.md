@@ -24,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Top folders consuming space and top largest files breakdown.
   - Safe error handling for symlinks, loops, and restricted permissions.
 - **Safe Cleanup Center**:
-  - Conservative pre-audit of user temporary files (%TEMP%), safe Windows cache, and thumbnail caches.
-  - Zero-risk safety shield preventing deletion of any Windows system files (System32, WinSxS, registry, etc.).
+  - Conservative review of supported temporary files and caches before cleanup.
+  - Safety checks to avoid protected Windows system locations and skip files that are locked or in use.
   - Automatic skip of currently locked or in-use files.
   - Explicit confirmation modal before any deletion.
   - Direct integration with Windows Recycle Bin.
@@ -40,10 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Windows Utilities**:
   - Quick launch shortcuts for Task Manager, Storage Sense, System Info, Disk Optimization, Disk Cleanup, Device Manager, and Resource Monitor.
 - **Full Localization (Arabic & English)**:
-  - Default Arabic interface with Right-to-Left (RTL) layout.
-  - English interface with Left-to-Right (LTR) layout.
+  - Default English interface with Left-to-Right (LTR) layout.
+  - Arabic interface with Right-to-Left (RTL) layout.
   - Dynamic in-app language switching with persistent settings.
 - **Testing & Packaging**:
-  - 10 automated unit tests passing across all critical services.
+  - 17 automated tests covering core file, storage, and system services.
   - Windows standalone launcher (`run.bat`) and executable build script (`build.bat`).
+  - Packaged Windows executable requests administrator approval through the Windows UAC prompt.
   - GitHub Actions automated CI workflow.
