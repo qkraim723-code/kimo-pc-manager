@@ -1,8 +1,8 @@
 $currentDir = (Get-Location).Path
 $wsh = New-Object -ComObject WScript.Shell
 $shortcutPath = Join-Path $currentDir "Kimo PC Manager.lnk"
-$targetExe = Join-Path $currentDir "dist\KimoPCManager\KimoPCManager.exe"
-$workingDir = Join-Path $currentDir "dist\KimoPCManager"
+$targetExe = Join-Path $currentDir "dist\KimoPCManager-Verified\KimoPCManager\KimoPCManager.exe"
+$workingDir = Join-Path $currentDir "dist\KimoPCManager-Verified\KimoPCManager"
 $iconPath = Join-Path $currentDir "assets\icon.ico"
 
 $shortcut = $wsh.CreateShortcut($shortcutPath)

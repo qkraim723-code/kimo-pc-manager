@@ -105,3 +105,28 @@ def test_file_properties(temp_dir):
     assert props["size"] == 5
     assert "path" in props
     assert "modified" in props
+
+
+def test_reject_path_traversal_names(temp_dir):
+    service = FileManagerService()
+
+    success, _ = service.create_folder(temp_dir, "..\\outside")
+    assert success is False
+
+    source = temp_dir / "item.txt"
+    source.write_text("safe", encoding="utf-8")
+    success, _ = service.rename_item(source, "..\\outside.txt")
+    assert success is False
+    assert source.exists()
+
+
+def test_reject_copying_folder_into_itself(temp_dir):
+    service = FileManagerService()
+    source = temp_dir / "source"
+    source.mkdir()
+    destination = source / "nested"
+    destination.mkdir()
+
+    success, message = service.copy_item(source, destination)
+    assert success is False
+    assert "itself" in message.lower()

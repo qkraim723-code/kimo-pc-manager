@@ -32,6 +32,10 @@ class DuplicateFinder:
     def cancel(self):
         self._cancel_requested = True
 
+    @property
+    def cancel_requested(self) -> bool:
+        return self._cancel_requested
+
     def hash_file(self, file_path: Path, chunk_size: int = 65536) -> Optional[str]:
         """Calculates SHA-256 hash in streaming chunks to minimize memory consumption."""
         hasher = hashlib.sha256()

@@ -1,9 +1,8 @@
 """Safe cleanup center page with transparent audit and confirmation."""
 
 from typing import List
-from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -17,6 +16,9 @@ from PySide6.QtWidgets import (
 from core.cleanup_service import CleanupCategory, SafeCleanupService
 from core.localization import format_bytes, t
 from core.windows_tools import WindowsToolsService
+from ui.components.help_banner import HelpBanner
+from ui.components.themed_checkbox import ThemedCheckBox
+from ui.components.refresh_feedback import animate_refresh
 from ui.components.dialogs import ConfirmDialog
 from ui.icons import create_vector_icon
 from ui.theme import (
@@ -27,6 +29,7 @@ from ui.theme import (
     COLOR_DANGER,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
+    set_button_variant,
 )
 
 
@@ -68,9 +71,11 @@ class CleanupPage(QWidget):
         super().__init__(parent)
         self.service = SafeCleanupService()
         self.categories = self.service.get_categories()
+        self.category_widgets: List[QWidget] = []
         self.thread: QThread = None
-        self.category_widgets = []
-
+        self._thread_operation = ""
+        self._post_clean_summary = ""
+        self._closing = False
         self._build_ui()
 
     def _build_ui(self):
@@ -99,13 +104,13 @@ class CleanupPage(QWidget):
 
         self.btn_scan = QPushButton(t("cleanup.btn_scan"))
         self.btn_scan.setIcon(create_vector_icon("search", color="#122019", size=16))
-        self.btn_scan.setProperty("class", "accent_btn")
+        set_button_variant(self.btn_scan, "accent_btn")
         self.btn_scan.clicked.connect(self._start_scan)
         ctrl_layout.addWidget(self.btn_scan)
 
         self.btn_clean = QPushButton(t("cleanup.btn_clean"))
         self.btn_clean.setIcon(create_vector_icon("trash", color="#122019", size=16))
-        self.btn_clean.setProperty("class", "accent_btn")
+        set_button_variant(self.btn_clean, "accent_btn")
         self.btn_clean.setEnabled(False)
         self.btn_clean.clicked.connect(self._confirm_and_clean)
         ctrl_layout.addWidget(self.btn_clean)
@@ -173,6 +178,8 @@ class CleanupPage(QWidget):
         shield_layout.addWidget(shield_text, stretch=1)
 
         main_layout.addWidget(shield_frame)
+        self.help_banner = HelpBanner("cleanup")
+        main_layout.addWidget(self.help_banner)
 
     def _render_category_cards(self):
         for w in self.category_widgets:
@@ -181,25 +188,31 @@ class CleanupPage(QWidget):
 
         for cat in self.categories:
             card = QFrame()
+            card.setObjectName("cleanup_category_card")
             card.setProperty("class", "card_frame")
+            card.setProperty("selected", bool(cat.is_enabled))
+            self._style_category_card(card, cat.is_enabled)
             c_layout = QHBoxLayout(card)
             c_layout.setContentsMargins(16, 14, 16, 14)
             c_layout.setSpacing(14)
 
-            cb = QCheckBox()
+            cb = ThemedCheckBox()
             cb.setChecked(cat.is_enabled)
-            cb.toggled.connect(lambda checked, c=cat: self._on_category_toggled(c, checked))
+            cb.setAccessibleName(t(cat.title_key))
+            cb.setToolTip(t(cat.desc_key))
+            cb.setCursor(Qt.PointingHandCursor)
+            cb.toggled.connect(lambda checked, c=cat, frame=card: self._on_category_toggled(c, checked, frame))
             c_layout.addWidget(cb)
 
             info_layout = QVBoxLayout()
             info_layout.setSpacing(4)
 
             title_lbl = QLabel(t(cat.title_key))
-            title_lbl.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; font-weight: bold; font-size: 14px;")
+            title_lbl.setStyleSheet(f"color: {COLOR_TEXT_PRIMARY}; background: transparent; font-weight: bold; font-size: 14px;")
             info_layout.addWidget(title_lbl)
 
             desc_lbl = QLabel(t(cat.desc_key))
-            desc_lbl.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 12px;")
+            desc_lbl.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; background: transparent; font-size: 12px;")
             info_layout.addWidget(desc_lbl)
 
             c_layout.addLayout(info_layout, stretch=1)
@@ -218,9 +231,22 @@ class CleanupPage(QWidget):
 
         self.cats_layout.addStretch()
 
-    def _on_category_toggled(self, category: CleanupCategory, checked: bool):
+    def _on_category_toggled(self, category: CleanupCategory, checked: bool, card: QFrame = None):
         category.is_enabled = checked
+        if card is not None:
+            card.setProperty("selected", bool(checked))
+            self._style_category_card(card, checked)
         self._update_clean_button_state()
+
+    @staticmethod
+    def _style_category_card(card: QFrame, selected: bool):
+        """Keep each category visibly boxed and distinguish checked rows."""
+        background = "#2B4035" if selected else COLOR_CARD_BG
+        border = COLOR_ACCENT if selected else COLOR_BORDER
+        card.setStyleSheet(
+            f"QFrame#cleanup_category_card {{ background-color: {background}; border: 1px solid {border}; "
+            "border-radius: 12px; }"
+        )
 
     def _update_clean_button_state(self):
         total_enabled_size = sum(c.total_size for c in self.categories if c.is_enabled)
@@ -228,11 +254,16 @@ class CleanupPage(QWidget):
         self.btn_clean.setEnabled(total_enabled_files > 0)
 
     def _start_scan(self):
+        if self.thread and self.thread.isRunning():
+            self.status_label.setText(t("cleanup.scan_already_running"))
+            return
+
         self.btn_scan.setEnabled(False)
         self.btn_clean.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.status_label.setText(t("cleanup.status_scanning"))
 
+        self._thread_operation = "scan"
         self.thread = QThread()
         self.worker = CleanupScanWorker(self.service, self.categories)
         self.worker.moveToThread(self.thread)
@@ -243,6 +274,7 @@ class CleanupPage(QWidget):
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(self._on_thread_finished)
 
         self.thread.start()
 
@@ -257,10 +289,17 @@ class CleanupPage(QWidget):
             if hasattr(cat, "_size_label"):
                 cat._size_label.setText(format_bytes(cat.total_size))
 
-        self.status_label.setText(
-            f"Found {total_files} safe temporary files totaling {format_bytes(total_size)}."
+        summary = t(
+            "cleanup.scan_result",
+            count=total_files,
+            size=format_bytes(total_size),
         )
+        if self._post_clean_summary:
+            summary = f"{self._post_clean_summary} {summary}"
+            self._post_clean_summary = ""
+        self.status_label.setText(summary)
         self._update_clean_button_state()
+        animate_refresh(self.cats_layout.parentWidget(), 180)
 
     def _confirm_and_clean(self):
         total_size = sum(c.total_size for c in self.categories if c.is_enabled)
@@ -278,29 +317,49 @@ class CleanupPage(QWidget):
             self.btn_clean.setEnabled(False)
             self.progress_bar.setVisible(True)
 
+            self._thread_operation = "clean"
             self.thread = QThread()
             self.worker = CleanupExecWorker(self.service, self.categories)
             self.worker.moveToThread(self.thread)
 
             self.thread.started.connect(self.worker.run)
-            self.worker.progress.connect(lambda fn, idx: self.status_label.setText(f"Cleaning: {fn}"))
+            self.worker.progress.connect(lambda fn, idx: self.status_label.setText(t("cleanup.cleaning_file", name=fn)))
             self.worker.finished.connect(self._on_clean_finished)
             self.worker.finished.connect(self.thread.quit)
             self.worker.finished.connect(self.worker.deleteLater)
             self.thread.finished.connect(self.thread.deleteLater)
+            self.thread.finished.connect(self._on_thread_finished)
 
             self.thread.start()
 
-    def _on_clean_finished(self, cleaned: int, freed: int, skipped: int):
+    def _on_thread_finished(self):
+        self.thread = None
+        self.worker = None
+        QTimer.singleShot(0, self._after_thread_stopped)
+
+    def _after_thread_stopped(self):
+        operation = self._thread_operation
+        self._thread_operation = ""
+        if self._closing:
+            return
+        if operation == "clean" and self._post_clean_summary:
+            self._start_scan()
+            return
         self.btn_scan.setEnabled(True)
+
+    def _on_clean_finished(self, cleaned: int, freed: int, skipped: int):
         self.progress_bar.setVisible(False)
-        self.status_label.setText(
-            t("cleanup.status_clean_done", freed=format_bytes(freed), cleaned_files=cleaned)
+        result_key = "cleanup.status_clean_done_with_skips" if skipped else "cleanup.status_clean_done"
+        self._post_clean_summary = t(
+            result_key,
+            freed=format_bytes(freed),
+            cleaned_files=cleaned,
+            skipped=skipped,
         )
-        # Re-scan to refresh values
-        self._start_scan()
+        self.status_label.setText(self._post_clean_summary)
 
     def refresh_translations(self):
+        self.help_banner.refresh_translations()
         self.title_label.setText(t("cleanup.title"))
         self.subtitle_label.setText(t("cleanup.subtitle"))
         self.btn_scan.setText(t("cleanup.btn_scan"))

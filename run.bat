@@ -5,8 +5,8 @@ echo               Starting Kimo PC Manager
 echo ========================================================
 echo.
 
-if exist "dist\KimoPCManager\KimoPCManager.exe" (
-    start "" "dist\KimoPCManager\KimoPCManager.exe"
+if exist "dist\KimoPCManager-Verified\KimoPCManager\KimoPCManager.exe" (
+    start "" "dist\KimoPCManager-Verified\KimoPCManager\KimoPCManager.exe"
     exit /b 0
 )
 

@@ -17,7 +17,7 @@ if not exist assets\icon.ico (
 )
 
 echo Running PyInstaller Build...
-pyinstaller --noconfirm --onedir --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
+powershell -NoProfile -ExecutionPolicy Bypass -File build.ps1
 
 if %errorlevel% equ 0 (
     echo.
@@ -29,7 +29,7 @@ if %errorlevel% equ 0 (
     echo.
     echo  Application ready to run from:
     echo    1. Shortcut: "Kimo PC Manager.lnk" (in this folder and on Desktop)
-    echo    2. Executable: "dist\KimoPCManager\KimoPCManager.exe"
+    echo    2. Executable: "dist\KimoPCManager-Verified\KimoPCManager\KimoPCManager.exe"
     echo ========================================================
 ) else (
     echo.

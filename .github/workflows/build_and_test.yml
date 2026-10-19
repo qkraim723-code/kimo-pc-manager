@@ -34,11 +34,11 @@ jobs:
         python assets/generate_icon.py
 
     - name: Build Windows Executable
-      run: |
-        pyinstaller --noconfirm --onedir --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
+      run: .\build.ps1
+      shell: pwsh
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
       with:
         name: KimoPCManager-Windows-x64
-        path: dist/KimoPCManager/
+        path: dist/KimoPCManager-Verified/KimoPCManager/

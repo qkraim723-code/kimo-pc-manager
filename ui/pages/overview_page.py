@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 from core.localization import format_bytes, t
 from core.system_monitor import SystemMonitor
 from ui.components.drive_usage_card import SystemDriveCard
+from ui.components.help_banner import HelpBanner
 from ui.components.stat_card import StatCard
 from ui.icons import create_vector_icon
 from ui.theme import (
@@ -52,6 +53,8 @@ class OverviewPage(QWidget):
         self._build_grid_cards()
         self._build_system_drive_section()
         self._build_quick_access_bar()
+        self.help_banner = HelpBanner("overview")
+        self.main_layout.addWidget(self.help_banner)
 
         scroll.setWidget(container)
         root_layout = QVBoxLayout(self)
@@ -233,6 +236,7 @@ class OverviewPage(QWidget):
 
     def refresh_translations(self):
         """Re-applies translations when user switches language."""
+        self.help_banner.refresh_translations()
         self.app_title_label.setText(t("app_title"))
         self.app_subtitle_label.setText(t("app_subtitle"))
         self.card_files.set_title(t("overview.file_manager_title"))

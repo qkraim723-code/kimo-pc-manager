@@ -15,7 +15,7 @@ class Localization:
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, current_lang: str = "ar"):
+    def __init__(self, current_lang: str = "en"):
         if hasattr(self, "_initialized") and self._initialized:
             return
         self.current_lang = current_lang

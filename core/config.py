@@ -10,7 +10,9 @@ class ConfigManager:
     """Manages persistent application settings in AppData directory."""
 
     DEFAULT_CONFIG = {
-        "language": "ar",
+        "language": "en",
+        "language_user_set": False,
+        "support_ads_enabled": True,
         "theme": "dark",
         "refresh_interval": 2,
         "file_view_mode": "list",
@@ -49,6 +51,10 @@ class ConfigManager:
                     loaded = json.load(f)
                     cfg = dict(self.DEFAULT_CONFIG)
                     cfg.update(loaded)
+                    # Older releases silently defaulted to Arabic. Start those
+                    # existing installs in English unless the user chose a language.
+                    if not loaded.get("language_user_set", False):
+                        cfg["language"] = "en"
                     return cfg
             except Exception:
                 pass
@@ -66,6 +72,8 @@ class ConfigManager:
 
     def set(self, key: str, value):
         self.data[key] = value
+        if key == "language":
+            self.data["language_user_set"] = True
         self.save()
 
     def reset_to_defaults(self):

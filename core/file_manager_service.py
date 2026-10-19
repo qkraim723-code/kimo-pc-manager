@@ -123,7 +123,10 @@ class FileManagerService:
 
     def create_folder(self, parent_dir: Path, folder_name: str) -> Tuple[bool, str]:
         try:
-            target = parent_dir / folder_name.strip()
+            folder_name = folder_name.strip()
+            if not folder_name or Path(folder_name).name != folder_name or folder_name in {".", ".."}:
+                return False, "Folder name must be a single valid path component."
+            target = parent_dir / folder_name
             if target.exists():
                 return False, f"Folder '{folder_name}' already exists."
             target.mkdir(parents=False, exist_ok=False)
@@ -134,7 +137,7 @@ class FileManagerService:
     def rename_item(self, target_path: Path, new_name: str) -> Tuple[bool, str]:
         try:
             new_name = new_name.strip()
-            if not new_name:
+            if not new_name or Path(new_name).name != new_name or new_name in {".", ".."}:
                 return False, "Invalid name."
             new_path = target_path.parent / new_name
             if new_path.exists():
@@ -164,6 +167,16 @@ class FileManagerService:
         conflict_action: str = "rename",  # "rename", "overwrite", "skip"
     ) -> Tuple[bool, str]:
         try:
+            if conflict_action not in {"rename", "overwrite", "skip"}:
+                return False, "Invalid conflict action."
+            if not src.exists() or not dst_folder.is_dir():
+                return False, "Source or destination folder does not exist."
+            if src.is_dir():
+                source_resolved = src.resolve()
+                destination_resolved = dst_folder.resolve()
+                if destination_resolved == source_resolved or destination_resolved.is_relative_to(source_resolved):
+                    return False, "Cannot copy a folder into itself."
+
             dest_path = dst_folder / src.name
             if dest_path.exists():
                 if conflict_action == "skip":
@@ -174,7 +187,10 @@ class FileManagerService:
 
             if src.is_dir():
                 if dest_path.exists() and conflict_action == "overwrite":
-                    shutil.rmtree(dest_path)
+                    if dest_path.is_dir():
+                        shutil.rmtree(dest_path)
+                    else:
+                        dest_path.unlink()
                 shutil.copytree(src, dest_path)
             else:
                 shutil.copy2(src, dest_path)
@@ -189,6 +205,16 @@ class FileManagerService:
         conflict_action: str = "rename",
     ) -> Tuple[bool, str]:
         try:
+            if conflict_action not in {"rename", "overwrite", "skip"}:
+                return False, "Invalid conflict action."
+            if not src.exists() or not dst_folder.is_dir():
+                return False, "Source or destination folder does not exist."
+            if src.is_dir():
+                source_resolved = src.resolve()
+                destination_resolved = dst_folder.resolve()
+                if destination_resolved == source_resolved or destination_resolved.is_relative_to(source_resolved):
+                    return False, "Cannot move a folder into itself."
+
             dest_path = dst_folder / src.name
             if dest_path.exists():
                 if conflict_action == "skip":
@@ -220,6 +246,16 @@ class FileManagerService:
     def open_with_default_app(self, path: Path) -> bool:
         try:
             os.startfile(str(path))
+            return True
+        except Exception:
+            return False
+
+    def open_as_administrator(self, path: Path) -> bool:
+        """Starts an executable using the Windows UAC elevation prompt."""
+        try:
+            if not path.is_file() or path.suffix.lower() != ".exe":
+                return False
+            os.startfile(str(path), "runas")
             return True
         except Exception:
             return False

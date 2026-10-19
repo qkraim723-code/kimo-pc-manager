@@ -1,7 +1,8 @@
 """Main Application Window for Kimo PC Manager."""
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QDesktopServices, QIcon
+from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -19,6 +20,7 @@ from core.file_manager_service import FileManagerService
 from core.localization import get_localization, t
 from core.system_monitor import SystemMonitor
 from ui.icons import create_vector_icon
+from ui.pages.apps_page import AppsPage
 from ui.pages.cleanup_page import CleanupPage
 from ui.pages.duplicate_page import DuplicatePage
 from ui.pages.file_manager_page import FileManagerPage
@@ -27,6 +29,7 @@ from ui.pages.performance_page import PerformancePage
 from ui.pages.settings_page import SettingsPage
 from ui.pages.storage_page import StoragePage
 from ui.pages.tools_page import ToolsPage
+from ui.components.support_dialog import ADVERTISEMENT_URL, SupportDialog
 from ui.theme import (
     COLOR_ACCENT,
     COLOR_ACCENT_DARK,
@@ -103,6 +106,7 @@ class MainWindow(QMainWindow):
         nav_items = [
             ("overview", "monitor", "nav.overview"),
             ("file_manager", "folder", "nav.file_manager"),
+            ("apps", "apps", "nav.apps"),
             ("storage_analyzer", "storage", "nav.storage_analyzer"),
             ("safe_cleanup", "shield", "nav.safe_cleanup"),
             ("performance", "speed", "nav.performance"),
@@ -134,7 +138,11 @@ class MainWindow(QMainWindow):
         self.pages_stack.addWidget(self.page_overview)
 
         self.page_files = FileManagerPage(self.file_service, self.monitor)
+        self.page_files.open_apps_manager.connect(lambda: self.navigate_to("apps"))
         self.pages_stack.addWidget(self.page_files)
+
+        self.page_apps = AppsPage()
+        self.pages_stack.addWidget(self.page_apps)
 
         self.page_storage = StoragePage(self.monitor)
         self.pages_stack.addWidget(self.page_storage)
@@ -142,7 +150,7 @@ class MainWindow(QMainWindow):
         self.page_cleanup = CleanupPage()
         self.pages_stack.addWidget(self.page_cleanup)
 
-        self.page_performance = PerformancePage(self.monitor)
+        self.page_performance = PerformancePage(self.monitor, config=self.config)
         self.pages_stack.addWidget(self.page_performance)
 
         self.page_duplicates = DuplicatePage()
@@ -153,23 +161,39 @@ class MainWindow(QMainWindow):
 
         self.page_settings = SettingsPage(self.config)
         self.page_settings.language_changed.connect(self._on_language_changed)
+        self.page_settings.refresh_interval_changed.connect(self.page_performance.set_refresh_interval)
         self.pages_stack.addWidget(self.page_settings)
 
         self.page_indices = {
             "overview": 0,
             "file_manager": 1,
-            "storage_analyzer": 2,
-            "safe_cleanup": 3,
-            "performance": 4,
-            "duplicate_finder": 5,
-            "windows_tools": 6,
-            "settings": 7,
+            "apps": 2,
+            "storage_analyzer": 3,
+            "safe_cleanup": 4,
+            "performance": 5,
+            "duplicate_finder": 6,
+            "windows_tools": 7,
+            "settings": 8,
         }
 
         self.root_layout.addWidget(self.pages_stack, stretch=1)
 
         # Select Overview initially
         self.navigate_to("overview")
+
+    def closeEvent(self, event):
+        self.page_cleanup._closing = True
+        for page, cancel in (
+            (self.page_cleanup, self.page_cleanup.service.cancel),
+            (self.page_storage, self.page_storage.analyzer.cancel),
+            (self.page_duplicates, self.page_duplicates.finder.cancel),
+        ):
+            cancel()
+            thread = page.thread
+            if thread and thread.isRunning():
+                thread.quit()
+                thread.wait()
+        event.accept()
 
     def navigate_to(self, page_key: str):
         idx = self.page_indices.get(page_key, 0)
@@ -185,6 +209,16 @@ class MainWindow(QMainWindow):
                 btn.setIcon(create_vector_icon(icon_name, color=COLOR_TEXT_MUTED, size=18))
             btn.style().unpolish(btn)
             btn.style().polish(btn)
+
+    def show_support_dialog(self):
+        SupportDialog(
+            config=self.config,
+            parent=self,
+        ).exec()
+
+    def show_startup_support(self):
+        if self.config.get("support_ads_enabled", True):
+            QDesktopServices.openUrl(QUrl(ADVERTISEMENT_URL))
 
     def _apply_direction(self):
         is_rtl = self.loc.is_rtl()
@@ -202,6 +236,7 @@ class MainWindow(QMainWindow):
         # Propagate to all pages
         self.page_overview.refresh_translations()
         self.page_files.refresh_translations()
+        self.page_apps.refresh_translations()
         self.page_storage.refresh_translations()
         self.page_cleanup.refresh_translations()
         self.page_performance.refresh_translations()

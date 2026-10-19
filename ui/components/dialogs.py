@@ -22,6 +22,7 @@ from ui.theme import (
     COLOR_DANGER,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
+    set_button_variant,
 )
 
 
@@ -70,9 +71,9 @@ class ConfirmDialog(BaseStyledDialog):
 
         self.confirm_btn = QPushButton(t("common.ok"))
         if is_danger:
-            self.confirm_btn.setProperty("class", "danger_btn")
+            set_button_variant(self.confirm_btn, "danger_btn")
         else:
-            self.confirm_btn.setProperty("class", "accent_btn")
+            set_button_variant(self.confirm_btn, "accent_btn")
         self.confirm_btn.clicked.connect(self.accept)
         btn_box.addWidget(self.confirm_btn)
 
@@ -103,7 +104,7 @@ class PromptDialog(BaseStyledDialog):
         btn_box.addWidget(cancel_btn)
 
         ok_btn = QPushButton(t("common.ok"))
-        ok_btn.setProperty("class", "accent_btn")
+        set_button_variant(ok_btn, "accent_btn")
         ok_btn.clicked.connect(self.accept)
         btn_box.addWidget(ok_btn)
 
@@ -130,12 +131,12 @@ class ConflictDialog(BaseStyledDialog):
         btn_box.setSpacing(10)
 
         btn_rename = QPushButton(t("file_manager.conflict_rename"))
-        btn_rename.setProperty("class", "accent_btn")
+        set_button_variant(btn_rename, "accent_btn")
         btn_rename.clicked.connect(lambda: self._select("rename"))
         btn_box.addWidget(btn_rename)
 
         btn_overwrite = QPushButton(t("file_manager.conflict_overwrite"))
-        btn_overwrite.setProperty("class", "danger_btn")
+        set_button_variant(btn_overwrite, "danger_btn")
         btn_overwrite.clicked.connect(lambda: self._select("overwrite"))
         btn_box.addWidget(btn_overwrite)
 
@@ -185,6 +186,6 @@ class PropertiesDialog(BaseStyledDialog):
         self.main_layout.addLayout(grid)
 
         close_btn = QPushButton(t("common.close"))
-        close_btn.setProperty("class", "accent_btn")
+        set_button_variant(close_btn, "accent_btn")
         close_btn.clicked.connect(self.accept)
         self.main_layout.addWidget(close_btn, alignment=Qt.AlignRight)

@@ -4,7 +4,7 @@ import datetime
 import os
 import platform
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import psutil
 
 
@@ -56,7 +56,6 @@ class SystemMonitor:
         try:
             partitions = psutil.disk_partitions(all=False)
             for part in partitions:
-                # Filter out cdrom/removable with no media
                 if "cdrom" in part.opts or part.fstype == "":
                     continue
                 try:
@@ -102,7 +101,6 @@ class SystemMonitor:
             }
 
     def get_disk_io_rates(self) -> Dict[str, float]:
-        """Calculates current read and write throughput in bytes/second."""
         now = time.time()
         try:
             io = psutil.disk_io_counters()
@@ -143,7 +141,7 @@ class SystemMonitor:
                 "boot_time": boot_dt.strftime("%Y-%m-%d %H:%M:%S"),
                 "uptime_str": uptime_str,
             }
-        except Exception as e:
+        except Exception:
             return {
                 "os": "Windows",
                 "hostname": "PC",
@@ -154,20 +152,40 @@ class SystemMonitor:
                 "uptime_str": "Unknown",
             }
 
-    def get_top_processes(self, limit: int = 15, sort_by: str = "cpu") -> List[Dict[str, any]]:
+    def get_top_processes(
+        self,
+        limit: int = 25,
+        sort_by: str = "cpu",
+        user_apps_only: bool = False,
+    ) -> List[Dict[str, any]]:
         procs = []
-        for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_info"]):
+        current_username = os.environ.get("USERNAME", "").lower()
+
+        for p in psutil.process_iter(["pid", "name", "cpu_percent", "memory_info", "username"]):
             try:
                 info = p.info
                 name = info["name"] or "Unknown"
+                name_lower = name.lower()
                 mem = info["memory_info"].rss if info.get("memory_info") else 0
                 cpu = info.get("cpu_percent") or 0.0
+                user = (info.get("username") or "").lower()
+
+                is_user_app = current_username in user if (current_username and user) else True
+                if user_apps_only and not is_user_app:
+                    continue
+                try:
+                    executable = p.exe()
+                except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess, OSError):
+                    executable = ""
+
                 procs.append({
                     "pid": info["pid"],
                     "name": name,
+                    "exe": executable,
                     "cpu_percent": float(cpu),
                     "memory_bytes": float(mem),
-                    "is_protected": name.lower() in self.PROTECTED_PROCESSES or info["pid"] <= 4,
+                    "is_protected": name_lower in self.PROTECTED_PROCESSES or info["pid"] <= 4,
+                    "is_user_app": is_user_app,
                 })
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
@@ -180,23 +198,29 @@ class SystemMonitor:
             procs.sort(key=lambda x: x["memory_bytes"], reverse=True)
         return procs[:limit]
 
-    def terminate_process(self, pid: int) -> bool:
-        """Safely terminates a user process after ensuring it is not a protected system PID."""
+    def terminate_process(self, pid: int) -> Tuple[bool, str]:
+        """Safely and decisively terminates a process by PID."""
         if pid <= 4:
-            return False
+            return False, "Protected system process."
         try:
             p = psutil.Process(pid)
             name = (p.name() or "").lower()
             if name in self.PROTECTED_PROCESSES:
-                return False
+                return False, f"Process '{name}' is a critical protected Windows process."
+
+            # Attempt graceful termination first
             p.terminate()
-            p.wait(timeout=2)
-            return True
-        except (psutil.NoSuchProcess, psutil.TimeoutExpired, psutil.AccessDenied):
             try:
+                p.wait(timeout=1.5)
+                return True, "Terminated successfully."
+            except psutil.TimeoutExpired:
+                # Force kill if not terminated
                 p.kill()
-                return True
-            except Exception:
-                return False
-        except Exception:
-            return False
+                return True, "Force killed successfully."
+
+        except psutil.NoSuchProcess:
+            return True, "Process already stopped."
+        except psutil.AccessDenied:
+            return False, "Access denied. Try restarting Kimo PC Manager as Administrator."
+        except Exception as e:
+            return False, str(e)

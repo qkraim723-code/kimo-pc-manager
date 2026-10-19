@@ -23,5 +23,14 @@ def test_system_monitor_metrics():
 
     # Protected process termination must be prevented
     # System PID 0 or 4
-    assert monitor.terminate_process(0) is False
-    assert monitor.terminate_process(4) is False
+    succ0, _ = monitor.terminate_process(0)
+    succ4, _ = monitor.terminate_process(4)
+    assert succ0 is False
+    assert succ4 is False
+
+
+def test_process_entries_include_executable_path_field():
+    processes = SystemMonitor().get_top_processes(limit=5)
+
+    assert processes
+    assert all("exe" in process for process in processes)

@@ -1,4 +1,4 @@
-"""Storage analyzer page with deep space scanning and visualization."""
+"""Storage analyzer page with interactive presets, live drive cards, and deep scanning."""
 
 from pathlib import Path
 from PySide6.QtCore import QObject, QThread, Qt, Signal
@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
 
 from core.localization import format_bytes, t
 from core.storage_analyzer import StorageAnalyzer, StorageScanResult
+from ui.components.help_banner import HelpBanner
+from ui.components.refresh_feedback import animate_refresh
 from core.system_monitor import SystemMonitor
 from ui.icons import create_vector_icon
 from ui.theme import (
@@ -29,18 +31,16 @@ from ui.theme import (
     COLOR_BORDER,
     COLOR_CARD_BG,
     COLOR_DANGER,
-    COLOR_INPUT_BG,
     COLOR_PROGRESS_BG,
     COLOR_TEXT_MUTED,
     COLOR_TEXT_PRIMARY,
+    set_button_variant,
 )
 
 
 class StorageScanWorker(QObject):
-    """Background worker for deep directory scanning."""
-
     finished = Signal(object)
-    progress = Signal(int, str, int)  # files_count, current_path, total_size
+    progress = Signal(int, str, int)
 
     def __init__(self, analyzer: StorageAnalyzer, target_path: Path):
         super().__init__()
@@ -56,7 +56,7 @@ class StorageScanWorker(QObject):
 
 
 class StoragePage(QWidget):
-    """Storage space analysis interface."""
+    """Storage space analysis interface with instant presets and visual metrics."""
 
     def __init__(self, monitor: SystemMonitor, parent: QWidget = None):
         super().__init__(parent)
@@ -71,9 +71,9 @@ class StoragePage(QWidget):
     def _build_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 20, 24, 20)
-        main_layout.setSpacing(16)
+        main_layout.setSpacing(14)
 
-        # Header Title & Subtitle
+        # Header
         header = QVBoxLayout()
         header.setSpacing(4)
         self.title_label = QLabel(t("storage.title"))
@@ -85,7 +85,36 @@ class StoragePage(QWidget):
         header.addWidget(self.subtitle_label)
         main_layout.addLayout(header)
 
-        # Control Bar: Target Selector + Browse + Start/Cancel
+        # Quick Presets Bar
+        presets_frame = QFrame()
+        presets_frame.setProperty("class", "card_frame")
+        pr_layout = QHBoxLayout(presets_frame)
+        pr_layout.setContentsMargins(14, 10, 14, 10)
+        pr_layout.setSpacing(10)
+
+        pr_lbl = QLabel(t("storage.quick_presets"))
+        pr_lbl.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-weight: bold;")
+        pr_layout.addWidget(pr_lbl)
+
+        btn_preset_c = QPushButton(t("storage.preset_c"))
+        btn_preset_c.setIcon(create_vector_icon("storage", color=COLOR_ACCENT, size=16))
+        btn_preset_c.clicked.connect(lambda: self._start_scan_path(Path("C:\\")))
+        pr_layout.addWidget(btn_preset_c)
+
+        btn_preset_dl = QPushButton(t("storage.preset_downloads"))
+        btn_preset_dl.setIcon(create_vector_icon("folder", color=COLOR_ACCENT, size=16))
+        btn_preset_dl.clicked.connect(lambda: self._start_scan_path(Path.home() / "Downloads"))
+        pr_layout.addWidget(btn_preset_dl)
+
+        btn_preset_docs = QPushButton(t("storage.preset_docs"))
+        btn_preset_docs.setIcon(create_vector_icon("file", color=COLOR_ACCENT, size=16))
+        btn_preset_docs.clicked.connect(lambda: self._start_scan_path(Path.home() / "Documents"))
+        pr_layout.addWidget(btn_preset_docs)
+
+        pr_layout.addStretch()
+        main_layout.addWidget(presets_frame)
+
+        # Target Selector Frame
         ctrl_frame = QFrame()
         ctrl_frame.setProperty("class", "card_frame")
         ctrl_layout = QHBoxLayout(ctrl_frame)
@@ -109,43 +138,43 @@ class StoragePage(QWidget):
 
         self.btn_scan = QPushButton(t("storage.btn_start_scan"))
         self.btn_scan.setIcon(create_vector_icon("search", color="#122019", size=16))
-        self.btn_scan.setProperty("class", "accent_btn")
-        self.btn_scan.clicked.connect(self._start_scan)
+        set_button_variant(self.btn_scan, "accent_btn")
+        self.btn_scan.clicked.connect(self._start_scan_combo)
         ctrl_layout.addWidget(self.btn_scan)
 
         self.btn_cancel = QPushButton(t("storage.btn_cancel_scan"))
         self.btn_cancel.setIcon(create_vector_icon("trash", color=COLOR_DANGER, size=16))
-        self.btn_cancel.setProperty("class", "danger_btn")
+        set_button_variant(self.btn_cancel, "danger_btn")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel_scan)
         ctrl_layout.addWidget(self.btn_cancel)
 
         main_layout.addWidget(ctrl_frame)
 
-        # Progress / Status Frame
+        # Status & Live Progress
         self.progress_frame = QFrame()
         self.progress_frame.setProperty("class", "card_frame")
         p_layout = QVBoxLayout(self.progress_frame)
-        p_layout.setContentsMargins(16, 12, 16, 12)
-        p_layout.setSpacing(8)
+        p_layout.setContentsMargins(16, 10, 16, 10)
+        p_layout.setSpacing(6)
 
         self.status_label = QLabel(t("storage.no_scan_yet"))
         self.status_label.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 13px;")
         p_layout.addWidget(self.status_label)
 
         self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 0)  # Indeterminate while scanning
+        self.progress_bar.setRange(0, 0)
         self.progress_bar.setFixedHeight(8)
         self.progress_bar.setVisible(False)
         p_layout.addWidget(self.progress_bar)
 
         main_layout.addWidget(self.progress_frame)
 
-        # Splitter: Left (Top Folders) & Right (Largest Files)
+        # Splitter: Top Folders & Largest Files
         splitter = QSplitter(Qt.Horizontal)
         splitter.setStyleSheet("QSplitter::handle { background-color: #354A40; width: 2px; }")
 
-        # Top Folders Section
+        # Top Folders
         folders_box = QWidget()
         f_layout = QVBoxLayout(folders_box)
         f_layout.setContentsMargins(0, 0, 0, 0)
@@ -168,7 +197,7 @@ class StoragePage(QWidget):
         f_layout.addWidget(self.table_folders)
         splitter.addWidget(folders_box)
 
-        # Top Files Section
+        # Largest Files
         files_box = QWidget()
         files_layout = QVBoxLayout(files_box)
         files_layout.setContentsMargins(0, 0, 0, 0)
@@ -192,6 +221,8 @@ class StoragePage(QWidget):
         splitter.addWidget(files_box)
 
         main_layout.addWidget(splitter, stretch=1)
+        self.help_banner = HelpBanner("storage")
+        main_layout.addWidget(self.help_banner)
 
     def _populate_drives(self):
         self.target_combo.clear()
@@ -205,13 +236,22 @@ class StoragePage(QWidget):
         if folder:
             self.target_combo.addItem(folder, folder)
             self.target_combo.setCurrentIndex(self.target_combo.count() - 1)
+            self._start_scan_path(Path(folder))
 
-    def _start_scan(self):
+    def _start_scan_combo(self):
         target_path_str = self.target_combo.currentData()
-        if not target_path_str:
+        if target_path_str:
+            self._start_scan_path(Path(target_path_str))
+
+    def _start_scan_path(self, target_path: Path):
+        if not target_path.exists() or not target_path.is_dir():
+            self.status_label.setText(t("storage.invalid_target"))
             return
 
-        target_path = Path(target_path_str)
+        if self.thread and self.thread.isRunning():
+            self.status_label.setText(t("storage.scan_already_running"))
+            return
+
         self.btn_scan.setEnabled(False)
         self.btn_cancel.setEnabled(True)
         self.progress_bar.setVisible(True)
@@ -230,8 +270,15 @@ class StoragePage(QWidget):
         self.worker.finished.connect(self.thread.quit)
         self.worker.finished.connect(self.worker.deleteLater)
         self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.finished.connect(self._on_thread_finished)
 
         self.thread.start()
+
+    def _on_thread_finished(self):
+        self.thread = None
+        self.worker = None
+        self.btn_scan.setEnabled(True)
+        self.btn_cancel.setEnabled(False)
 
     def _on_scan_progress(self, files_count: int, current_path: str, total_sz: int):
         self.status_label.setText(f"{t('storage.scanning_status', path=current_path)} ({format_bytes(total_sz)})")
@@ -241,19 +288,26 @@ class StoragePage(QWidget):
         self.btn_cancel.setEnabled(False)
 
     def _on_scan_finished(self, result: StorageScanResult):
-        self.btn_scan.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.progress_bar.setVisible(False)
+        animate_refresh(self.table_folders)
+        animate_refresh(self.table_files)
 
-        if not result.is_completed:
+        if result.error:
+            self.status_label.setText(t("storage.scan_error", error=result.error))
+        elif not result.is_completed:
             self.status_label.setText(t("storage.scan_cancelled"))
         else:
-            self.status_label.setText(
-                t("storage.scan_completed", count=result.total_files, size=format_bytes(result.total_size))
+            summary = t(
+                "storage.scan_completed",
+                count=result.total_files,
+                size=format_bytes(result.total_size),
             )
+            if result.skipped_count:
+                summary += " " + t("storage.scan_skipped", count=result.skipped_count)
+            self.status_label.setText(summary)
 
-        # Populate top folders
-        sorted_folders = sorted(result.subfolder_sizes.items(), key=lambda x: x[1], reverse=True)[:25]
+        sorted_folders = sorted(result.subfolder_sizes.items(), key=lambda x: x[1], reverse=True)[:30]
         self.table_folders.setRowCount(len(sorted_folders))
         for row, (fname, fsize) in enumerate(sorted_folders):
             pct = (fsize / result.total_size * 100.0) if result.total_size > 0 else 0.0
@@ -271,7 +325,6 @@ class StoragePage(QWidget):
             self.table_folders.setItem(row, 1, item_pct)
             self.table_folders.setItem(row, 2, item_size)
 
-        # Populate largest files
         self.table_files.setRowCount(len(result.largest_files))
         for row, file_info in enumerate(result.largest_files):
             f_name = QTableWidgetItem(file_info["name"])
@@ -287,6 +340,7 @@ class StoragePage(QWidget):
             self.table_files.setItem(row, 2, f_size)
 
     def refresh_translations(self):
+        self.help_banner.refresh_translations()
         self.title_label.setText(t("storage.title"))
         self.subtitle_label.setText(t("storage.subtitle"))
         self.btn_browse.setText(t("storage.btn_browse_folder"))

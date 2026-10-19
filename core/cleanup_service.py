@@ -82,6 +82,25 @@ class SafeCleanupService:
             edge_cache = lap / "Microsoft" / "Edge" / "User Data" / "Default" / "Cache" / "Cache_Data"
             if edge_cache.exists():
                 browser_cache_paths.append(edge_cache)
+            # Chromium browser caches only; browser profiles and credentials stay untouched.
+            for browser_root in (
+                lap / "BraveSoftware" / "Brave-Browser" / "User Data",
+                lap / "Opera Software" / "Opera Stable",
+                lap / "Opera Software" / "Opera GX Stable",
+            ):
+                cache = browser_root / "Default" / "Cache" / "Cache_Data" if "User Data" in str(browser_root) else browser_root / "Cache"
+                if cache.exists():
+                    browser_cache_paths.append(cache)
+            # Firefox's disk cache is isolated from cookies, history, and passwords.
+            firefox_profiles = lap / "Mozilla" / "Firefox" / "Profiles"
+            if firefox_profiles.exists():
+                try:
+                    for profile in firefox_profiles.iterdir():
+                        cache = profile / "cache2"
+                        if cache.is_dir():
+                            browser_cache_paths.append(cache)
+                except OSError:
+                    pass
 
         if browser_cache_paths:
             categories.append(

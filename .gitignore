@@ -11,11 +11,15 @@ dist/
 
 # Pytest / Coverage / Virtual Environments
 .pytest_cache/
+.test-temp/
 .coverage
 htmlcov/
 venv/
+.venv/
 env/
 .env
+*.log
+Kimo PC Manager.lnk
 
 # IDE / Editor files
 .vscode/
