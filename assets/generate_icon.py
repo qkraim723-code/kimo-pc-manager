@@ -35,7 +35,11 @@ def create_app_icon(output_dir: Path):
     ico_path = output_dir / "icon.ico"
 
     img.save(png_path, format="PNG")
-    img.save(ico_path, format="ICO", sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])
+
+    # Generate standard Windows multi-resolution icon
+    sizes = [(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (24, 24), (16, 16)]
+    resized_imgs = [img.resize(s, Image.Resampling.LANCZOS) for s in sizes]
+    resized_imgs[0].save(ico_path, format="ICO", append_images=resized_imgs[1:])
 
     print(f"Icons generated at {output_dir}")
 

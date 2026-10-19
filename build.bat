@@ -16,17 +16,20 @@ if not exist assets\icon.ico (
     python assets\generate_icon.py
 )
 
-echo Running PyInstaller Build (Standalone One-File Executable)...
-pyinstaller --noconfirm --onefile --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
+echo Running PyInstaller Build...
+pyinstaller --noconfirm --onedir --windowed --name "KimoPCManager" --icon "assets/icon.ico" --add-data "locales;locales" --add-data "assets;assets" main.py
 
 if %errorlevel% equ 0 (
-    copy /Y "dist\KimoPCManager.exe" ".\KimoPCManager.exe" >nul
+    echo.
+    echo Creating application shortcuts with custom icon...
+    powershell -ExecutionPolicy Bypass -File create_shortcut.ps1 >nul
     echo.
     echo ========================================================
     echo  BUILD SUCCESSFUL!
-    echo  Standalone EXE ready at:
-    echo    1. .\KimoPCManager.exe (Project Root)
-    echo    2. .\dist\KimoPCManager.exe
+    echo.
+    echo  Application ready to run from:
+    echo    1. Shortcut: "Kimo PC Manager.lnk" (in this folder and on Desktop)
+    echo    2. Executable: "dist\KimoPCManager\KimoPCManager.exe"
     echo ========================================================
 ) else (
     echo.
